@@ -104,30 +104,36 @@ class Active_Image_Node(bpy.types.Operator):
 			pass
 			#print ("not node editor or no nodes on nodetree")
 		return False
-	'''
+	
 	def invoke(self, context, event):
 		#print ("invoke event type:", event.type)
 		return self.execute(context)	
-
+	'''
 	def execute(self, context):
 		
-		#image is in bpy.data.images ? just loaded new image for example
+		
 
 		c = context.area.spaces.active
 		
 		selected_nodes = [i for i in c.node_tree.nodes if i.select]
-
+		
 		for node in selected_nodes:
+
 			if node_has_texture(node):
-				
-				#print()
-				#print("node image name:", node.texture.image.name)
-				#print()
-				context.window_manager.my_previews = node.texture.image.name
-				return {'FINISHED'}	
-			else:
-				#Refresh.execute(self, context)
-				return {'FINISHED'}	
+				#print ("node:",node)
+				if c.node_tree.nodes.active == node:
+					#image is not in preview image list ? just loaded new image for example
+					imagenames = [i.name for i in bpy.data.images if i.type == 'IMAGE']
+					preview_imagenames = list(preview_collections["main"])
+					difference = list(set(imagenames) ^ set(preview_imagenames))
+					if difference:
+						#print ("difference found !")
+						Refresh.execute(Refresh,context)
+						#return {'FINISHED'}
+					#
+					context.window_manager.my_previews = node.texture.image.name
+					return {'FINISHED'}	
+			
 			
 		return {'FINISHED'}		   
 
@@ -138,7 +144,7 @@ class Replace_Image(bpy.types.Operator):
 	bl_description = "Replace selected image node images with selected image"
 	
 	image_nodes = IntProperty(default = 0)
-	active_node = bpy.props.BoolProperty(default = False)
+	active_node = BoolProperty(default = False)
 
 	@classmethod
 	def poll(cls, context):
@@ -286,8 +292,8 @@ def register():
 	#bpy.utils.register_class(Test)
 	Refresh.update = True
 	km = bpy.context.window_manager.keyconfigs.addon.keymaps.new(name='Node Editor', space_type='NODE_EDITOR')
-	kmi = km.keymap_items.new('active_image_node.operator', 'RIGHTMOUSE', 'CLICK')
-
+	kmi = km.keymap_items.new('active_image_node.operator', 'LEFTMOUSE', 'CLICK')
+	
 
 def unregister():
 	
