@@ -35,6 +35,8 @@ import bpy
 from bpy.props import BoolProperty, IntProperty
 
 
+
+
 def my_preview_update(self, context):
 	Replace_Image.active_node = False
 	Replace_Image.execute(self, context)
@@ -62,56 +64,58 @@ def node_image_change():
 				node.texture.image = bpy.data.images[bpy.context.window_manager.my_previews]
 
 ############################################################################
+class image_fix_duplicates(bpy.types.Operator):
+	bl_idname = 'image_fix_duplicates.operator'
+	bl_label = "Fix duplicated images"
+	bl_description = "Image names end with .001 .002 but the same filepath will be deleted and only one is shared between image nodes"	
+
+#fix duplicated images, different name but the same image filepath
+#delete duplicated images and replace image node images with that which have the same filepath
+#
+
+
+	def execute(self, context):
+		print()
+		multi_images = []
+		multi_filepaths = []
+		for i in bpy.data.images:
+			cnt = 0
+			for j in bpy.data.images:
+				if i.filepath == j.filepath:
+					cnt += 1
+					if cnt == 2:
+						if i.filepath not in multi_filepaths:
+							multi_images.append(i)
+							multi_filepaths.append(i.filepath)
+
+		print ("multi:",multi_images)
+		print ("multi:",multi_filepaths)
+		ngroups = [ng for ng in bpy.data.node_groups if ng.bl_idname == 'VRayNodeTreeMaterial']
+
+		for ng in ngroups:
+			for node in ng.nodes:
+				if node_has_texture(node):
+					print (node.texture.image.filepath)
+					if node.texture.image.filepath in multi_filepaths:
+						node.texture.image = multi_images[multi_filepaths.index(node.texture.image.filepath)]
+
+		for i in bpy.data.images:
+			cnt = 0
+			for j in bpy.data.images:
+				if i.filepath == j.filepath:
+					cnt += 1
+					if cnt > 1:
+						bpy.data.images.remove(j)
+		if cnt > 1:
+			Refresh(self,context)
+		return {'FINISHED'}	
+
 class Active_Image_Node(bpy.types.Operator):
 	bl_idname = 'active_image_node.operator'
 	bl_label = "Show Image"
 	bl_description = "Show selected image node image"	
-	'''
-	@classmethod
-	def poll(cls, context):
-		#print("poll")
-		c = context.area.spaces.active
-		#node editor, nodes exist,selected node has texture, image preview list == bpy.data.images.name
-		#print(bpy.context.screen.areas[3].regions[1].type)
-		if c.type == 'NODE_EDITOR' and hasattr(c.node_tree,'nodes'):
-			selected_nodes = [i for i in c.node_tree.nodes if i.select]
-			#print ("selected nodes:",selected_nodes)
-			imagenames = [i.name for i in bpy.data.images if i.type == 'IMAGE']
-			preview_imagenames = list(preview_collections["main"])
-			difference = list(set(imagenames) ^ set(preview_imagenames))
-			if difference:
-				#print ("difference found !")
-				Refresh.execute(Refresh,context)
-				return False
-			for node in selected_nodes:
-				if node_has_texture(node):
-					#print ("node has image texture")
-					#image is in image preview list ? just loaded new image for example is not there
-					
-					if node.texture.image.name in bpy.data.images:
-						if context.scene.auto_show_image:
-							context.window_manager.my_previews = node.texture.image.name
-							#preview_collections["main"].my_preview = node.texture.image.name
-							#print()
-							#print("poll successed")
-							return True
-					
-						return True
-					else:
-						return false
-			return False
-		else:
-			pass
-			#print ("not node editor or no nodes on nodetree")
-		return False
 	
-	def invoke(self, context, event):
-		#print ("invoke event type:", event.type)
-		return self.execute(context)	
-	'''
 	def execute(self, context):
-		
-		
 
 		c = context.area.spaces.active
 		
@@ -250,7 +254,10 @@ class PreviewsExamplePanel(bpy.types.Panel):
 		
 		row = layout.row()
 		#row.prop(context.scene,'auto_show_image',text = "Auto show image")
+		#row = layout.row()
+		row.operator('image_fix_duplicates.operator', icon = 'GHOST')
 		row = layout.row()
+
 		cnt = Replace_Image.image_nodes
 		row.label('{} Image node{} selected'.format(cnt,"" if cnt == 0 or cnt == 1 else "s" ))
 		
