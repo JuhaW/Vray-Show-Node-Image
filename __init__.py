@@ -33,9 +33,11 @@ bl_info = {
 import os, time
 import bpy
 from bpy.props import BoolProperty, IntProperty
+VRAY = True
 
-
-
+#cycles
+#bpy.context.object.active_material.node_tree.nodes.active.type = 'TEX_IMAGE'
+#bpy.context.object.active_material.node_tree.nodes.active.image.filepath
 
 def my_preview_update(self, context):
 	Replace_Image.active_node = False
@@ -43,9 +45,19 @@ def my_preview_update(self, context):
 
 	
 def node_has_texture(node):
-	
-	return hasattr(node,'vray_plugin') and hasattr(node, 'texture') and hasattr(node.texture, 'image')
-		
+	global VRAY
+	if VRAY:
+		return hasattr(node,'vray_plugin') and hasattr(node, 'texture') and hasattr(node.texture, 'image')
+	else:
+		return hasattr(node, 'image')
+
+def node_set_image(node):
+	global VRAY
+	if VRAY:
+		node.texture.image = bpy.data.images[bpy.context.window_manager.my_previews]
+	else:
+		node.image = bpy.data.images[bpy.context.window_manager.my_previews]
+
 def node_image_change():
 	area = [i for i in bpy.context.screen.areas if i.type == 'NODE_EDITOR'][0]
 	nodes = [i for i in area.spaces.active.node_tree.nodes if i.select]
@@ -57,11 +69,11 @@ def node_image_change():
 			
 			if Replace_Image.active_node:
 				node_active = area.spaces.active.node_tree.nodes.active
-				node_active.texture.image = bpy.data.images[bpy.context.window_manager.my_previews]
+				node_set_image(node_active)
 				Replace_Image.active_node = False
 				return
 			else:
-				node.texture.image = bpy.data.images[bpy.context.window_manager.my_previews]
+				node_set_image(node)
 
 ############################################################################
 class image_fix_duplicates(bpy.types.Operator):
@@ -75,7 +87,7 @@ class image_fix_duplicates(bpy.types.Operator):
 
 
 	def execute(self, context):
-		print()
+		global VRAY
 		multi_images = []
 		multi_filepaths = []
 		for i in bpy.data.images:
@@ -90,14 +102,23 @@ class image_fix_duplicates(bpy.types.Operator):
 
 		print ("multi:",multi_images)
 		print ("multi:",multi_filepaths)
-		ngroups = [ng for ng in bpy.data.node_groups if ng.bl_idname == 'VRayNodeTreeMaterial']
+		if VRAY:
+			ngroups = [ng for ng in bpy.data.node_groups if ng.bl_idname == 'VRayNodeTreeMaterial']
+		else:
+			ngroups = [ng.node_tree for ng in bpy.data.materials if hasattr(ng.node_tree,'nodes')]
 
 		for ng in ngroups:
 			for node in ng.nodes:
 				if node_has_texture(node):
-					print (node.texture.image.filepath)
-					if node.texture.image.filepath in multi_filepaths:
-						node.texture.image = multi_images[multi_filepaths.index(node.texture.image.filepath)]
+					
+					if VRAY:
+						print (node.texture.image.filepath)
+						if node.texture.image.filepath in multi_filepaths:
+							node.texture.image = multi_images[multi_filepaths.index(node.texture.image.filepath)]
+					else:
+						print (node.image.filepath)
+						if node.image.filepath in multi_filepaths:
+							node.image = multi_images[multi_filepaths.index(node.image.filepath)]
 
 		for i in bpy.data.images:
 			cnt = 0
@@ -116,9 +137,13 @@ class Active_Image_Node(bpy.types.Operator):
 	bl_description = "Show selected image node image"	
 	
 	def execute(self, context):
-
+		global VRAY
 		c = context.area.spaces.active
 		
+		if not hasattr(c.node_tree,'nodes'):
+			print("no nodes")
+			return {'FINISHED'}
+
 		selected_nodes = [i for i in c.node_tree.nodes if i.select]
 		
 		for node in selected_nodes:
@@ -134,8 +159,10 @@ class Active_Image_Node(bpy.types.Operator):
 						#print ("difference found !")
 						Refresh.execute(Refresh,context)
 						#return {'FINISHED'}
-					#
-					context.window_manager.my_previews = node.texture.image.name
+					if VRAY:
+						context.window_manager.my_previews = node.texture.image.name
+					else:
+						context.window_manager.my_previews = node.image.name
 					return {'FINISHED'}	
 			
 			
@@ -148,15 +175,21 @@ class Replace_Image(bpy.types.Operator):
 	bl_description = "Replace selected image node images with selected image"
 	
 	image_nodes = IntProperty(default = 0)
-	active_node = BoolProperty(default = False)
+	active_node = bpy.props.BoolProperty(default = False)
 
 	@classmethod
 	def poll(cls, context):
-		#print ("replace poll")
+		global VRAY
 		c = context.area.spaces.active
+		if bpy.context.scene.render.engine.startswith('VRAY',0):
+			VRAY = True
+		else:
+			VRAY = False
+
 		Replace_Image.image_nodes = 0
 
 		if c.type == 'NODE_EDITOR' and hasattr(c.node_tree,'nodes'):
+			#print ("poll")
 			selected_nodes = [i for i in c.node_tree.nodes if i.select]
 			for node in selected_nodes:
 				if node_has_texture(node):
@@ -312,16 +345,12 @@ def unregister():
 		bpy.utils.previews.remove(pcoll)
 	preview_collections.clear()
 	
-	bpy.utils.unregister_module(__name__)
-	
-	#bpy.utils.unregister_class(PreviewsExamplePanel)
-	#bpy.utils.unregister_class(Test)
-
 	#Remove keyboard shortcut configuration
 	kc = bpy.context.window_manager.keyconfigs.addon
 	km = kc.keymaps['Node Editor']
 	km.keymap_items.remove(km.keymap_items['active_image_node.operator'])
-
+	
+	bpy.utils.unregister_module(__name__)
 
 if __name__ == "__main__":
 	register()
